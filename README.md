@@ -31,3 +31,7 @@ for folder in os.listdir(base_folder):
     LOGGER.info('Done: %s'%input_img_folder)
 
 ```
+## Output File Format
+ - :x: No column header, entries are organized as `['frameID', 'label', 'xmin', 'ymin', 'xmax', 'ymax']`
+ - :x: No index column
+ - Entries of 'xmin', 'ymin', 'xmax', 'ymax' are all in 0-1 scale

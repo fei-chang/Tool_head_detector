@@ -12,13 +12,23 @@ from utils.torch_utils import select_device, time_sync
 # Adopted from YOLOv3 🚀 by Ultralytics, GPL-3.0 license
 # Modified for head detection usage in gaze following
 
-def load_model(pretrained_weights: str,
+import argparse
+
+def get_args_parser():
+    parser = argparse.ArgumentParser('General Setup', add_help=False)
+    parser.add_argument('--model_weights', type=str, default='/home/changfei/Tool_head_detector/head_detector_best.pt', help='path to load model weights')
+    parser.add_argument('--input_img_folder', type=str, help='path to image folder')
+    parser.add_argument('--txt_file', type=str, help='name of the txt file')
+    return parser
+
+
+def load_model(model_weights: str,
                imgsz=(640,640),  # inference size (pixels)
                device='cuda:0',
                ):
     # Load model
     device = select_device(device)
-    model = DetectMultiBackend(pretrained_weights, device=device, dnn=False)
+    model = DetectMultiBackend(model_weights, device=device, dnn=False)
     stride, names, pt, jit, onnx = model.stride, model.names, model.pt, model.jit, model.onnx
     imgsz = check_img_size(imgsz, s=stride)  # check image size
 
@@ -79,16 +89,24 @@ def run_single_folder(model,
 
 
 if __name__ == "__main__":
-    # Load model
-    model_weights = '/home/changfei/Tool_head_detector/best.pt'
-    model, device, imgsz = load_model(model_weights)
 
-    ################################################################################
-    # Modify code here for different folder stucture
+    parser = argparse.ArgumentParser('Run head detection', parents=[get_args_parser()])
+    args = parser.parse_args()
+
+    model, device, imgsz = load_model(args.model_weights)
+    dataset = LoadImages(args.input_img_folder, img_size=imgsz, stride=model.stride, auto=model.pt and not model.jit)
+    run_single_folder(model, device, dataset, args.txt_file)
+
+    # # Load model
+    # model_weights = '/home/changfei/Tool_head_detector/best.pt'
+    # model, device, imgsz = load_model(model_weights)
+
     # ################################################################################
-    input_img_folder = '/home/changfei/X_Nas/ShanghaiASD/20230531/frames/小鸟/DD96-RJA-小鸟'
-    output_txt_file = '/home/changfei/X_Nas/ShanghaiASD/20230531/frames/小鸟/DD96-RJA-小鸟/annotations/raw_detections.txt'
+    # # Modify code here for different folder stucture
+    # # ################################################################################
+    # input_img_folder = '/home/changfei/X_Nas/ShanghaiASD/20230531/frames/小鸟/DD96-RJA-小鸟'
+    # txt_file = '/home/changfei/X_Nas/ShanghaiASD/20230531/frames/小鸟/DD96-RJA-小鸟/annotations/raw_detections.txt'
 
-    dataset = LoadImages(input_img_folder, img_size=imgsz, stride=model.stride, auto=model.pt and not model.jit)
-    run_single_folder(model, device, dataset, output_txt_file)
-    LOGGER.info('Done: %s'%input_img_folder)
+    # dataset = LoadImages(input_img_folder, img_size=imgsz, stride=model.stride, auto=model.pt and not model.jit)
+    # run_single_folder(model, device, dataset, txt_file)
+    # LOGGER.info('Done: %s'%input_img_folder)

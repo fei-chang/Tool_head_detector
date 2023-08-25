@@ -158,16 +158,16 @@ class _RepeatSampler:
 
 class LoadImages:
     #  image/video dataloader, i.e. `python detect.py --source image.jpg/vid.mp4`
-    def __init__(self, path, img_size=640, stride=32, auto=True):
-        p = str(Path(path).resolve())  # os-agnostic absolute path
-        if '*' in p:
-            files = sorted(glob.glob(p, recursive=True))  # glob
-        elif os.path.isdir(p):
-            files = sorted(glob.glob(os.path.join(p, '*.*')))  # dir
-        elif os.path.isfile(p):
-            files = [p]  # files
-        else:
-            raise Exception(f'ERROR: {p} does not exist')
+    def __init__(self, files, img_size=640, stride=32, auto=True):
+        # p = str(Path(path).resolve())  # os-agnostic absolute path
+        # if '*' in p:
+        #     files = sorted(glob.glob(p, recursive=True))  # glob
+        # elif os.path.isdir(p):
+        #     files = sorted(glob.glob(os.path.join(p, '*.*')))  # dir
+        # elif os.path.isfile(p):
+        #     files = [p]  # files
+        # else:
+        #     raise Exception(f'ERROR: {p} does not exist')
 
         images = [x for x in files if x.split('.')[-1].lower() in IMG_FORMATS]
         videos = [x for x in files if x.split('.')[-1].lower() in VID_FORMATS]
@@ -184,7 +184,7 @@ class LoadImages:
             self.new_video(videos[0])  # new video
         else:
             self.cap = None
-        assert self.nf > 0, f'No images or videos found in {p}. ' \
+        assert self.nf > 0, 'No images or videos found.' \
                             f'Supported formats are:\nimages: {IMG_FORMATS}\nvideos: {VID_FORMATS}'
 
     def __iter__(self):

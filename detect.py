@@ -1,34 +1,24 @@
 import os
 from pathlib import Path
-
 import torch
-
+import pandas as pd
 from models.common import DetectMultiBackend
 from utils.datasets import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
 from utils.general import (LOGGER, check_file, check_img_size, check_imshow, check_requirements, colorstr,
                            increment_path, non_max_suppression, print_args, scale_coords, strip_optimizer, xyxy2xywh)
 from utils.torch_utils import select_device, time_sync
+from boxmot import DeepOCSORT
 
 # Adopted from YOLOv3 🚀 by Ultralytics, GPL-3.0 license
 # Modified for head detection usage in gaze following
 
-import argparse
-
-def get_args_parser():
-    parser = argparse.ArgumentParser('General Setup', add_help=False)
-    parser.add_argument('--model_weights', type=str, default='/home/changfei/Tool_head_detector/head_detector_best.pt', help='path to load model weights')
-    parser.add_argument('--input_img_folder', type=str, help='path to image folder')
-    parser.add_argument('--txt_file', type=str, help='name of the txt file')
-    return parser
-
-
-def load_model(model_weights: str,
+def load_model(pretrained_weights: str,
                imgsz=(640,640),  # inference size (pixels)
-               device='cuda:0',
+               device='cpu',
                ):
     # Load model
     device = select_device(device)
-    model = DetectMultiBackend(model_weights, device=device, dnn=False)
+    model = DetectMultiBackend(pretrained_weights, device=device, dnn=False)
     stride, names, pt, jit, onnx = model.stride, model.names, model.pt, model.jit, model.onnx
     imgsz = check_img_size(imgsz, s=stride)  # check image size
 
@@ -38,7 +28,8 @@ def load_model(model_weights: str,
     
     return model, device, imgsz
 
-def run_single_folder(model, 
+def run(model, 
+        tracker,
         device, 
         dataset,
         txt_name,  # save results to an txt file in the output folder
@@ -71,16 +62,13 @@ def run_single_folder(model,
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(im.shape[2:], det[:, :4], im0.shape).round()
-
-                # Print results
-                for c in det[:, -1].unique():
-                    n = (det[:, -1] == c).sum()  # detections per class
-                # Write results
-                for *xyxy, conf, cls in reversed(det):
-                    xy_normalized = tuple((torch.tensor(xyxy).view(1, 4) / gn).view(-1))  # normalized xywh
+                tracks = tracker.update(det.cpu().numpy(), im0)
+                for t in tracks:
+                    pid = t[4]
+                    xy_normalized = tuple(t[:4]/gn)
                     with open(txt_path, 'a') as f:
                         f.write('%s'%p.stem) # number of frame
-                        line = (cls, *xy_normalized)
+                        line = (pid, *xy_normalized)
                         f.write((', %g' * len(line))% line + '\n')
         counter+=1
         if counter%print_every==0:
@@ -89,24 +77,37 @@ def run_single_folder(model,
 
 
 if __name__ == "__main__":
+    model_weights = '/home/changfei/Tool_head_detector/head_detector_best.pt'
+    input_path = '/home/changfei/X_Nas/ShanghaiASD/20230803/frames'
 
-    parser = argparse.ArgumentParser('Run head detection', parents=[get_args_parser()])
-    args = parser.parse_args()
+    vid_dir = '/home/changfei/X_Nas/ShanghaiASD/20230803/2023-8-3视频'
+    frame_dir = '/home/changfei/X_Nas/ShanghaiASD/20230803/frames'
+    output_path = '/home/changfei/Tool_head_detector/annotations'
 
-    model, device, imgsz = load_model(args.model_weights)
-    dataset = LoadImages(args.input_img_folder, img_size=imgsz, stride=model.stride, auto=model.pt and not model.jit)
-    run_single_folder(model, device, dataset, args.txt_file)
+    # Load model
+    model, device, imgsz = load_model(model_weights)
+    tracker = DeepOCSORT(
+        model_weights=Path('osnet_x0_25_msmt17.pt'), # which ReID model to use
+        device='cpu',
+        fp16=False,
+    )
 
-    # # Load model
-    # model_weights = '/home/changfei/Tool_head_detector/best.pt'
-    # model, device, imgsz = load_model(model_weights)
-
+    # ###############################################################################
+    # Modify code here for different folder stucture
     # ################################################################################
-    # # Modify code here for different folder stucture
-    # # ################################################################################
-    # input_img_folder = '/home/changfei/X_Nas/ShanghaiASD/20230531/frames/小鸟/DD96-RJA-小鸟'
-    # txt_file = '/home/changfei/X_Nas/ShanghaiASD/20230531/frames/小鸟/DD96-RJA-小鸟/annotations/raw_detections.txt'
 
-    # dataset = LoadImages(input_img_folder, img_size=imgsz, stride=model.stride, auto=model.pt and not model.jit)
-    # run_single_folder(model, device, dataset, txt_file)
-    # LOGGER.info('Done: %s'%input_img_folder)
+    input_folders = os.listdir(vid_dir)
+    input_folders.sort()
+    activity_dir = '/home/changfei/X_Nas/ShanghaiASD/20230803/activity_annotations'
+    for instance in input_folders[0:40]:
+        extracted_frame_dirs = os.listdir('%s/%s'%(frame_dir, instance))
+        activity_split = pd.read_csv('%s/%s.csv'%(activity_dir, instance))
+        for camera in extracted_frame_dirs:
+            output_sub_dir = '%s/%s/%s'%(output_path, instance, camera)
+            os.makedirs(output_sub_dir, exist_ok=True)
+            for interval in range(len(activity_split)):
+                start_frame, end_frame, _ = activity_split.loc[interval]
+                output_txt_file = '%s/activity_%05d.txt'%(output_sub_dir, interval)
+                img_ls = ['%s/%s/%s/%06d.jpg'%(frame_dir, instance, camera, f) for f in range(start_frame, end_frame)]
+                dataset =LoadImages(img_ls, img_size=imgsz, stride=model.stride, auto=model.pt and not model.jit)
+                run(model, tracker, device, dataset, output_txt_file)

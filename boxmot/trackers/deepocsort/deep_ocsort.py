@@ -354,7 +354,12 @@ class DeepOCSort(object):
         self.cmc_off = cmc_off
         self.aw_off = aw_off
         self.new_kf_off = new_kf_off
-
+        
+    def reset_trackers(self):
+        self.trackers = []
+        self.frame_count = 0
+        KalmanBoxTracker.count = 1
+        
     @PerClassDecorator
     def update(self, dets, img):
         """
